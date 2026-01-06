@@ -166,41 +166,47 @@
     </div>
     <script>
         // --- 1. ตั้งค่า Supabase ---
-        // วาง URL และ Anon Key ของคุณที่นี่ (ห้ามลบเครื่องหมาย ' ')
         const SUPABASE_URL = 'https://gdlqfeaamutndvgtdzpl.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_zJC86AqZha0pA99qy1gKhA_RXsoLD7K';
-        
-        // แก้ไขชื่อตัวแปรไม่ให้ซ้ำกับ Library
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let myPlayer = null;
         let myBalance = 0;
         let totalBudget = 4000;
+        // เช็ก Session เก่า (ถ้าเพิ่งรีเฟรชหน้าจอ)
+        window.onload = async () => {
+            const savedId = localStorage.getItem('game_player_id');
+            if (savedId) {
+                const { data, error } = await _supabase.from('players').select('*').eq('id', savedId).single();
+                if (data) {
+                    myPlayer = data;
+                    myBalance = data.balance;
+                    showGameSection();
+                }
+            }
+        };
+        function showGameSection() {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('gameSection').style.display = 'block';
+            document.getElementById('welcomeMsg').innerText = `คุณ: ${myPlayer.name}`;
+            startRealtime();
+            updateUI();
+        }
         // --- 2. ฟังก์ชันเริ่มเกม ---
         async function joinGame() {
             const btn = document.getElementById('joinBtn');
             const name = document.getElementById('playerName').value;
-            
             if (!name) return alert('กรุณาใส่ชื่อก่อนครับ');
             
             btn.innerText = 'กำลังเข้าร่วม...';
             btn.disabled = true;
             try {
-                // บันทึกข้อมูลลง Supabase
-                const { data, error } = await _supabase
-                    .from('players')
-                    .insert([{ name: name, balance: 0 }])
-                    .select();
+                const { data, error } = await _supabase.from('players').insert([{ name: name, balance: 0 }]).select();
                 if (error) throw error;
                 myPlayer = data[0];
-                document.getElementById('loginSection').style.display = 'none';
-                document.getElementById('gameSection').style.display = 'block';
-                document.getElementById('welcomeMsg').innerText = `คุณ: ${name}`;
-                
-                startRealtime();
-                updateUI();
+                localStorage.setItem('game_player_id', myPlayer.id); // เก็บ ID ลงเครื่อง
+                showGameSection();
             } catch (err) {
-                console.error('Error:', err);
-                alert('เกิดข้อผิดพลาด: ' + (err.message || 'เชื่อมต่อฐานข้อมูลไม่ได้'));
+                alert('เกิดข้อผิดพลาด: ' + err.message);
                 btn.innerText = 'เข้าสู่เกม';
                 btn.disabled = false;
             }
@@ -209,14 +215,25 @@
         async function handlePress() {
             if (totalBudget <= 0) return alert('บริษัทงบหมดแล้วจ้า! รอปีหน้านะ');
             const events = [
-                { text: 'โบนัสท้ายปี! +200 บาท', value: 200 },
-                { text: 'ซองขวัญถุง! เพื่อนทั้งทีมได้คนละ +50 (ยกเว้นคุณ)', value: 0, special: 'share' },
-                { text: 'โชคหล่นทับ! เงินพุ่งเพิ่ม 10%', value: 1.1, special: 'percent' },
-                { text: 'ภารกิจสายลับ! หลอกเพื่อนพูดคำว่า "สวย" (สำเร็จรับ +100)', value: 100 },
-                { text: 'เต้นโชว์ 10 วินาที! (สำเร็จรับ +150)', value: 150 }
+                { text: 'โบนัสท้ายปี! +200 บาท', value: 200, isActivity: false },
+                { text: 'ซองขวัญถุง! เพื่อนทั้งทีมได้คนละ +50', value: 0, special: 'share', isActivity: false },
+                { text: 'โชคหล่นทับ! เงินพุ่งเพิ่ม 10%', value: 1.1, special: 'percent', isActivity: false },
+                { text: 'เกมใบ้คำ! (สำเร็จรับ +100)', value: 100, isActivity: true },
+                { text: 'เป่ายิ้งฉุบชนะคนข้างซ้าย 3 ครั้ง! (สำเร็จรับ +150)', value: 150, isActivity: true }
             ];
             const event = events[Math.floor(Math.random() * events.length)];
             
+            if (event.isActivity) {
+                alert(`🎲 ภารกิจมาแล้ว: ${event.text}`);
+                const isSuccess = confirm('คุณทำภารกิจนี้สำเร็จหรือไม่? \n(กดตกลงเพื่อรับเงิน / กดยกเลิกหากทำไม่สำเร็จ)');
+                if (!isSuccess) {
+                    await _supabase.from('game_logs').insert([{ 
+                        message: `${myPlayer.name} ทำภารกิจไม่สำเร็จ 😢`, 
+                        type: 'fail' 
+                    }]);
+                    return;
+                }
+            }
             let gain = event.value;
             if (event.special === 'percent') gain = Math.floor(myBalance * 0.1);
             
@@ -224,46 +241,46 @@
             totalBudget -= gain;
             try {
                 await _supabase.from('players').update({ balance: myBalance }).eq('id', myPlayer.id);
-                await _supabase.from('game_logs').insert([{ message: `${myPlayer.name}: ${event.text}` }]);
+                await _supabase.from('game_logs').insert([{ 
+                    message: `${myPlayer.name}: ${event.text}`, 
+                    type: event.isActivity ? 'success' : 'normal' 
+                }]);
                 
                 updateUI();
-                alert(`ผลที่ได้: ${event.text}`);
+                alert(`ยินดีด้วย! ${event.text}`);
             } catch (err) {
                 alert('การเชื่อมต่อขัดข้อง: ' + err.message);
             }
         }
         function startRealtime() {
-            _supabase
-                .channel('public:game_logs')
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_logs' }, payload => {
-                    const box = document.getElementById('logBox');
-                    const item = document.createElement('div');
-                    item.className = 'log-item';
-                    item.innerText = payload.new.message;
-                    box.prepend(item);
-                })
-                .subscribe();
-            // ฟังการเปลี่ยนแปลงของตาราง player เพื่ออัปเดตงบรวม (แบบง่าย)
-            _supabase
-                .channel('public:players')
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'players' }, payload => {
-                    fetchTotalBudget();
-                })
-                .subscribe();
-                
+            _supabase.channel('public:game_logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_logs' }, payload => {
+                const box = document.getElementById('logBox');
+                const item = document.createElement('div');
+                item.className = 'log-item';
+                item.innerText = payload.new.message;
+                box.prepend(item);
+            }).subscribe();
+            
+            _supabase.channel('public:players').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'players' }, payload => {
+                fetchTotalBudget();
+                if (payload.new.id === myPlayer.id) {
+                    myBalance = payload.new.balance;
+                    updateUI();
+                }
+            }).subscribe();
             fetchTotalBudget();
         }
         async function fetchTotalBudget() {
-            const { data, error } = await _supabase.from('players').select('balance');
-            if (!error) {
+            const { data } = await _supabase.from('players').select('balance');
+            if (data) {
                 const totalGiven = data.reduce((sum, p) => sum + p.balance, 0);
                 totalBudget = 4000 - totalGiven;
                 updateUI();
             }
         }
         function updateUI() {
-            document.getElementById('userBalance').innerText = `${myBalance} THB`;
-            document.getElementById('budgetDisplay').innerText = `งบคงเหลือบริษัท: ${totalBudget} THB`;
+            document.getElementById('userBalance').innerText = `${myBalance.toLocaleString()} THB`;
+            document.getElementById('budgetDisplay').innerText = `งบคงเหลือบริษัท: ${totalBudget.toLocaleString()} THB`;
         }
     </script>
 </body>
