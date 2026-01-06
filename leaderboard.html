@@ -120,11 +120,18 @@
         <div id="feedContent"></div>
     </div>
     <script>
-        const SUPABASE_URL = 'https://gdlqfeaamutndvgtdzpl.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_zJC86AqZha0pA99qy1gKhA_RXsoLD7K';
-        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const SUPABASE_URL = 'YOUR_PROJECT_URL_HERE';
+        const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY_HERE';
+        
+        let _supabase = null;
         let popupQueue = [];
         let isPopupShowing = false;
+        // ฟังก์ชันเริ่มต้นระบบ
+        async function init() {
+            _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            updateLeaderboard();
+            startRealtime();
+        }
         async function updateLeaderboard() {
             const { data: players } = await _supabase.from('players').select('*').order('balance', { ascending: false });
             if (players) {
@@ -158,10 +165,14 @@
             }, 5000); // โชว์ 5 วินาที
         }
         function startRealtime() {
+            // แก้ไขชื่อ Channel ให้ตรงกับที่มือถือใช้ (public:game_logs)
             _supabase.channel('public:game_logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_logs' }, payload => {
+                console.log('New log received:', payload.new);
                 addFeedItem(payload.new.message);
                 showPopup(payload.new.message, payload.new.type);
-            }).subscribe();
+            }).subscribe((status) => {
+                console.log('Log channel status:', status);
+            });
             
             _supabase.channel('public:players').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'players' }, payload => {
                 updateLeaderboard();
@@ -172,11 +183,10 @@
             const item = document.createElement('div');
             item.className = 'feed-item';
             item.innerText = msg;
-            feed.prepend(item);
+            feed.prepend(item); // เพิ่มไว้บนสุด
             if (feed.children.length > 8) feed.lastChild.remove();
         }
-        updateLeaderboard();
-        startRealtime();
+        init();
     </script>
 </body>
 </html>
