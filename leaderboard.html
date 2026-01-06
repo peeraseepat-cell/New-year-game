@@ -20,6 +20,7 @@
             padding: 40px;
             display: grid;
             grid-template-columns: 2fr 1fr;
+            grid-template-rows: auto 1fr;
             gap: 40px;
             height: 100vh;
             box-sizing: border-box;
@@ -36,14 +37,14 @@
             justify-content: space-between;
             align-items: center;
         }
-        .budget-amount { font-size: 4rem; font-weight: 900; }
+        .budget-amount { font-size: 5rem; font-weight: 900; color: #fff; text-shadow: 0 0 20px var(--copper); }
         .rank-table {
             background: rgba(255, 255, 255, 0.05);
             border-radius: 20px;
             padding: 30px;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        table { width: 100%; border-collapse: collapse; font-size: 1.5rem; }
+        table { width: 100%; border-collapse: collapse; font-size: 1.8rem; }
         th { text-align: left; padding: 15px; color: grey; border-bottom: 1px solid #333; }
         td { padding: 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
         .live-feed {
@@ -56,15 +57,44 @@
         .feed-item {
             padding: 15px;
             border-bottom: 1px solid rgba(184, 115, 51, 0.2);
-            font-size: 1.2rem;
+            font-size: 1.4rem;
             animation: fadeIn 0.5s ease-out;
         }
         .highlight { color: var(--copper-light); font-weight: bold; }
+        /* Popup System */
+        #popupOverlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+            text-align: center;
+        }
+        .popup-content {
+            background: linear-gradient(135deg, #1a4731, #0a2e1f);
+            padding: 60px;
+            border-radius: 40px;
+            border: 5px solid var(--copper);
+            box-shadow: 0 0 100px var(--copper);
+            animation: popIn 0.6s cubic-bezier(0.17, 0.89, 0.32, 1.49);
+        }
+        .popup-msg { font-size: 4rem; font-weight: 900; margin-bottom: 20px; }
+        .popup-sub { font-size: 2rem; color: var(--copper-light); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div id="popupOverlay">
+        <div class="popup-content">
+            <div id="popupMsg" class="popup-msg">คณได้รับรางวัล!</div>
+            <div id="popupSub" class="popup-sub">ชื่อพนักงานกำลังโชคดี...</div>
+        </div>
+    </div>
     <div class="budget-container">
         <div>
             <h2 style="margin:0">งบประมาณบริษัทคงเหลือ</h2>
@@ -73,7 +103,7 @@
         <div class="budget-amount" id="budgetDisplay">4,000 THB</div>
     </div>
     <div class="rank-table">
-        <h2>นักล่าโบนัส (Top Rank)</h2>
+        <h2>อันดับนักล่าโบนัส (Top Rank)</h2>
         <table id="rankTable">
             <thead>
                 <tr>
@@ -82,55 +112,60 @@
                     <th>โบนัสรวม</th>
                 </tr>
             </thead>
-            <tbody>
-                <!-- ข้อมูลจะขึ้นที่นี่ -->
-            </tbody>
+            <tbody></tbody>
         </table>
     </div>
     <div class="live-feed">
         <h2>ความเคลื่อนไหวล่าสุด 🎊</h2>
-        <div id="feedContent">
-            <!-- Feed จะขึ้นที่นี่ -->
-        </div>
+        <div id="feedContent"></div>
     </div>
     <script>
-        const SUPABASE_URL = 'https://gdlqfeaamutndvgtdzpl.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_zJC86AqZha0pA99qy1gKhA_RXsoLD7K';
+        const SUPABASE_URL = 'YOUR_PROJECT_URL_HERE';
+        const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY_HERE';
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let popupQueue = [];
+        let isPopupShowing = false;
         async function updateLeaderboard() {
-            // ดึงข้อมูลพนักงาน
-            const { data: players, error: pError } = await _supabase
-                .from('players')
-                .select('*')
-                .order('balance', { ascending: false });
-            if (!pError) {
+            const { data: players } = await _supabase.from('players').select('*').order('balance', { ascending: false });
+            if (players) {
                 const tbody = document.querySelector('#rankTable tbody');
                 tbody.innerHTML = '';
                 let totalGiven = 0;
-                
                 players.forEach((p, index) => {
                     totalGiven += p.balance;
-                    const row = `<tr>
-                        <td>${index + 1}</td>
-                        <td class="highlight">${p.name}</td>
-                        <td>${p.balance.toLocaleString()} THB</td>
-                    </tr>`;
-                    tbody.innerHTML += row;
+                    tbody.innerHTML += `<tr><td>${index + 1}</td><td class="highlight">${p.name}</td><td>${p.balance.toLocaleString()} THB</td></tr>`;
                 });
                 document.getElementById('budgetDisplay').innerText = `${(4000 - totalGiven).toLocaleString()} THB`;
             }
         }
-        async function fetchInitialLogs() {
-            const { data: logs } = await _supabase
-                .from('game_logs')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(10);
+        function showPopup(msg, type) {
+            popupQueue.push({ msg, type });
+            if (!isPopupShowing) processQueue();
+        }
+        function processQueue() {
+            if (popupQueue.length === 0) { isPopupShowing = false; return; }
+            isPopupShowing = true;
+            const item = popupQueue.shift();
+            const overlay = document.getElementById('popupOverlay');
             
-            if (logs) {
-                const feed = document.getElementById('feedContent');
-                logs.forEach(log => addFeedItem(log.message));
-            }
+            document.getElementById('popupMsg').innerText = item.msg;
+            document.getElementById('popupSub').innerText = item.type === 'fail' ? 'เสียดายจัง!' : 'ยินดีด้วยจ้า! 🎉';
+            
+            overlay.style.display = 'flex';
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                setTimeout(processQueue, 500);
+            }, 5000); // โชว์ 5 วินาที
+        }
+        function startRealtime() {
+            _supabase.channel('public:game_logs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_logs' }, payload => {
+                addFeedItem(payload.new.message);
+                showPopup(payload.new.message, payload.new.type);
+            }).subscribe();
+            
+            _supabase.channel('public:players').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'players' }, payload => {
+                updateLeaderboard();
+            }).subscribe();
         }
         function addFeedItem(msg) {
             const feed = document.getElementById('feedContent');
@@ -138,22 +173,12 @@
             item.className = 'feed-item';
             item.innerText = msg;
             feed.prepend(item);
-            if (feed.children.length > 10) feed.lastChild.remove();
-        }
-        function startRealtime() {
-            _supabase
-                .channel('room1')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, payload => {
-                    updateLeaderboard();
-                })
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_logs' }, payload => {
-                    addFeedItem(payload.new.message);
-                })
-                .subscribe();
+            if (feed.children.length > 8) feed.lastChild.remove();
         }
         updateLeaderboard();
-        fetchInitialLogs();
         startRealtime();
     </script>
+</body>
+</html>
 </body>
 </html>
