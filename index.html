@@ -168,12 +168,14 @@
         // --- 1. ตั้งค่า Supabase ---
         const SUPABASE_URL = 'YOUR_PROJECT_URL_HERE';
         const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY_HERE';
-        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let _supabase = null; // ย้ายไปสร้างข้างในเพื่อป้องกัน Error บน Android
         let myPlayer = null;
         let myBalance = 0;
         let totalBudget = 4000;
         // เช็ก Session เก่า (ถ้าเพิ่งรีเฟรชหน้าจอ)
         window.onload = async () => {
+            // สร้างการเชื่อมต่อ Supabase เมื่อหน้าโหลดเสร็จ
+            _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             const savedId = localStorage.getItem('game_player_id');
             if (savedId) {
                 const { data, error } = await _supabase.from('players').select('*').eq('id', savedId).single();
