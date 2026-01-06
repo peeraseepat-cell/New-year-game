@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Main Screen - New Year Party</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --dark-green: #051b12;
+            --copper: #b87333;
+            --copper-light: #d99c63;
+            --off-white: #f5f5f5;
+        }
+        body {
+            background-color: var(--dark-green);
+            color: var(--off-white);
+            font-family: 'Prompt', sans-serif;
+            margin: 0;
+            padding: 40px;
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 40px;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        h1, h2 { color: var(--copper-light); margin-top: 0; }
+        .budget-container {
+            grid-column: 1 / span 2;
+            background: linear-gradient(90deg, rgba(184, 115, 51, 0.1), rgba(184, 115, 51, 0.3));
+            padding: 20px 40px;
+            border-radius: 20px;
+            border: 2px solid var(--copper);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .budget-amount { font-size: 4rem; font-weight: 900; }
+        .rank-table {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 1.5rem; }
+        th { text-align: left; padding: 15px; color: grey; border-bottom: 1px solid #333; }
+        td { padding: 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+        .live-feed {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid var(--copper);
+            overflow-y: auto;
+        }
+        .feed-item {
+            padding: 15px;
+            border-bottom: 1px solid rgba(184, 115, 51, 0.2);
+            font-size: 1.2rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+        .highlight { color: var(--copper-light); font-weight: bold; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="budget-container">
+        <div>
+            <h2 style="margin:0">งบประมาณบริษัทคงเหลือ</h2>
+            <p style="margin:0; opacity: 0.6;">New Year Party 2026</p>
+        </div>
+        <div class="budget-amount" id="budgetDisplay">4,000 THB</div>
+    </div>
+    <div class="rank-table">
+        <h2>นักล่าโบนัส (Top Rank)</h2>
+        <table id="rankTable">
+            <thead>
+                <tr>
+                    <th>ลำดับ</th>
+                    <th>ชื่อพนักงาน</th>
+                    <th>โบนัสรวม</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- ข้อมูลจะขึ้นที่นี่ -->
+            </tbody>
+        </table>
+    </div>
+    <div class="live-feed">
+        <h2>ความเคลื่อนไหวล่าสุด 🎊</h2>
+        <div id="feedContent">
+            <!-- Feed จะขึ้นที่นี่ -->
+        </div>
+    </div>
+    <script>
+        const SUPABASE_URL = 'https://gdlqfeaamutndvgtdzpl.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_zJC86AqZha0pA99qy1gKhA_RXsoLD7K';
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        async function updateLeaderboard() {
+            // ดึงข้อมูลพนักงาน
+            const { data: players, error: pError } = await _supabase
+                .from('players')
+                .select('*')
+                .order('balance', { ascending: false });
+            if (!pError) {
+                const tbody = document.querySelector('#rankTable tbody');
+                tbody.innerHTML = '';
+                let totalGiven = 0;
+                
+                players.forEach((p, index) => {
+                    totalGiven += p.balance;
+                    const row = `<tr>
+                        <td>${index + 1}</td>
+                        <td class="highlight">${p.name}</td>
+                        <td>${p.balance.toLocaleString()} THB</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+                document.getElementById('budgetDisplay').innerText = `${(4000 - totalGiven).toLocaleString()} THB`;
+            }
+        }
+        async function fetchInitialLogs() {
+            const { data: logs } = await _supabase
+                .from('game_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(10);
+            
+            if (logs) {
+                const feed = document.getElementById('feedContent');
+                logs.forEach(log => addFeedItem(log.message));
+            }
+        }
+        function addFeedItem(msg) {
+            const feed = document.getElementById('feedContent');
+            const item = document.createElement('div');
+            item.className = 'feed-item';
+            item.innerText = msg;
+            feed.prepend(item);
+            if (feed.children.length > 10) feed.lastChild.remove();
+        }
+        function startRealtime() {
+            _supabase
+                .channel('room1')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, payload => {
+                    updateLeaderboard();
+                })
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_logs' }, payload => {
+                    addFeedItem(payload.new.message);
+                })
+                .subscribe();
+        }
+        updateLeaderboard();
+        fetchInitialLogs();
+        startRealtime();
+    </script>
+</body>
+</html>
