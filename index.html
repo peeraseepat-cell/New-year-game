@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Year Party - Who Presses Who Pays</title>
+    <!-- นำเข้า Supabase Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --dark-green: #0a2e1f;
+            --copper: #b87333;
+            --copper-light: #d99c63;
+            --off-white: #f5f5f5;
+        }
+        body {
+            background-color: var(--dark-green);
+            color: var(--off-white);
+            font-family: 'Prompt', sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .container {
+            max-width: 400px;
+            width: 90%;
+            padding: 20px;
+            text-align: center;
+        }
+        header h1 {
+            color: var(--copper-light);
+            font-size: 2rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(184, 115, 51, 0.3);
+        }
+        .budget-bar {
+            background: rgba(184, 115, 51, 0.2);
+            border: 1px solid var(--copper);
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-weight: bold;
+            display: inline-block;
+            margin-bottom: 30px;
+            color: var(--copper-light);
+        }
+        .login-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        input {
+            width: calc(100% - 30px);
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(184, 115, 51, 0.3);
+            background: rgba(0, 0, 0, 0.2);
+            color: white;
+            font-size: 1rem;
+            text-align: center;
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, var(--copper), #8a5323);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        .main-button-container {
+            margin: 40px 0;
+            position: relative;
+        }
+        .press-btn {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--copper-light), var(--copper));
+            border: 8px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 0 0 40px rgba(184, 115, 51, 0.5), inset 0 0 20px rgba(0, 0, 0, 0.3);
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+        .press-btn:active {
+            transform: scale(0.92);
+            box-shadow: 0 0 20px rgba(184, 115, 51, 0.8);
+        }
+        .balance-card {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(184, 115, 51, 0.2);
+        }
+        .balance-amount {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--copper-light);
+            margin: 10px 0;
+        }
+        .log-box {
+            text-align: left;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 15px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+        }
+        .log-item {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        /* Animation เคลื่อนไหวเบาๆ */
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 40px rgba(184, 115, 51, 0.5); }
+            50% { transform: scale(1.03); box-shadow: 0 0 60px rgba(184, 115, 51, 0.7); }
+            100% { transform: scale(1); box-shadow: 0 0 40px rgba(184, 115, 51, 0.5); }
+        }
+        .press-btn {
+            animation: pulse 2s infinite ease-in-out;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container" id="app">
+        <header>
+            <h1>NEW YEAR 2026</h1>
+            <div class="budget-bar" id="budgetDisplay">งบคงเหลือบริษัท: 4,000 THB</div>
+        </header>
+        <!-- หน้าจอแรก: ใส่ชื่อ -->
+        <div id="loginSection" class="login-box">
+            <h2 style="margin-top:0">ยินดีต้อนรับ</h2>
+            <p>กรุณาใส่ชื่อเล่นเพื่อเข้าร่วมเกม</p>
+            <input type="text" id="playerName" placeholder="ชื่อเล่นของคุณ">
+            <button class="btn-gold" onclick="joinGame()">เข้าสู่เกม</button>
+        </div>
+        <!-- หน้าจอเกม: เมื่อ Join แล้ว -->
+        <div id="gameSection" style="display: none;">
+            <div class="balance-card">
+                <p style="margin:0">เงินในกระเป๋าคุณ</p>
+                <div class="balance-amount" id="userBalance">0 THB</div>
+                <p id="welcomeMsg" style="color: grey;"></p>
+            </div>
+            <div class="main-button-container">
+                <button class="press-btn" onclick="handlePress()">PRESS ME</button>
+            </div>
+            <div class="log-box" id="logBox">
+                <div class="log-item">เริ่มเกม! ขอให้โชคดี</div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // --- 1. ตั้งค่า Supabase ---
+        // วาง URL และ Anon Key ของคุณตรงนี้
+        const SUPABASE_URL = 'https://gdlqfeaamutndvgtdzpl.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_zJC86AqZha0pA99qy1gKhA_RXsoLD7K';
+        
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let myPlayer = null;
+        let myBalance = 0;
+        let totalBudget = 4000;
+        // --- 2. ฟังก์ชันเริ่มเกม ---
+        async function joinGame() {
+            const name = document.getElementById('playerName').value;
+            if (!name) return alert('กรุณาใส่ชื่อก่อนครับ');
+            // บันทึกข้อมูลลง Supabase
+            const { data, error } = await supabase
+                .from('players')
+                .insert([{ name: name, balance: 0 }])
+                .select();
+            if (error) {
+                console.error(error);
+                return alert('เข้าเกมไม่ได้ครับ ลองใหม่อีกครั้ง');
+            }
+            myPlayer = data[0];
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('gameSection').style.display = 'block';
+            document.getElementById('welcomeMsg').innerText = `คุณ: ${name}`;
+            
+            startRealtime();
+        }
+        // --- 3. ฟังก์ชันกดปุ่ม ---
+        async function handlePress() {
+            if (totalBudget <= 0) return alert('บริษัทงบหมดแล้วจ้า! รอปีหน้านะ');
+            const events = [
+                { text: 'โบนัสท้ายปี! +200 บาท', value: 200 },
+                { text: 'ซองขวัญถุง! เพื่อนทั้งทีมได้คนละ +50 (ยกเว้นคุณ)', value: 0, special: 'share' },
+                { text: 'โชคหล่นทับ! เงินพุ่งเพิ่ม 10%', value: 1.1, special: 'percent' },
+                { text: 'ภารกิจสายลับ! หลอกเพื่อนพูดคำว่า "สวย" (สำเร็จรับ +100)', value: 100 },
+                { text: 'เต้นโชว์ 10 วินาที! (สำเร็จรับ +150)', value: 150 }
+            ];
+            const event = events[Math.floor(Math.random() * events.length)];
+            
+            // อัปเดตเงิน (จำลองตรรกะแบบง่าย)
+            let gain = event.value;
+            if (event.special === 'percent') gain = Math.floor(myBalance * 0.1);
+            
+            myBalance += gain;
+            totalBudget -= gain;
+            // ส่งข้อมูลขึ้น Supabase
+            await supabase.from('players').update({ balance: myBalance }).eq('id', myPlayer.id);
+            await supabase.from('game_logs').insert([{ message: `${myPlayer.name}: ${event.text}` }]);
+            updateUI();
+            alert(`ผลที่ได้: ${event.text}`);
+        }
+        // --- 4. ระบบ Real-time (ดึงยอดเงินและงบอัตโนมัติ) ---
+        function startRealtime() {
+            // ฟังเสียงอัปเดตจากเครื่องอื่น
+            supabase
+                .channel('public:game_logs')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_logs' }, payload => {
+                    const box = document.getElementById('logBox');
+                    const item = document.createElement('div');
+                    item.className = 'log-item';
+                    item.innerText = payload.new.message;
+                    box.prepend(item);
+                })
+                .subscribe();
+        }
+        function updateUI() {
+            document.getElementById('userBalance').innerText = `${myBalance} THB`;
+            document.getElementById('budgetDisplay').innerText = `งบคงเหลือบริษัท: ${totalBudget} THB`;
+        }
+    </script>
+</body>
+</html>
